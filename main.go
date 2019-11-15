@@ -14,12 +14,12 @@ var (
 	mtu  int
 )
 
-func proxy(from net.Conn) {
-	defer from.Close()
+func proxy(to net.Conn) {
+	defer to.Close()
 
-	conn, err := net.Dial("udp", to)
+	conn, err := net.Dial("udp", from)
 	if err != nil {
-		log.Printf("Failed to dial %s: %s", to, err)
+		log.Printf("Failed to dial %s: %s", from, err)
 		return
 	}
 	defer conn.Close()
@@ -29,7 +29,7 @@ func proxy(from net.Conn) {
 		lenBuf := make([]byte, 2)
 		buf := make([]byte, mtu)
 		for {
-			n, err := io.ReadFull(from, lenBuf)
+			n, err := io.ReadFull(to, lenBuf)
 			if err != nil {
 				chErr <- fmt.Errorf("Failed to read full, %d != 2: %s", n, err)
 				return
@@ -41,7 +41,7 @@ func proxy(from net.Conn) {
 				return
 			}
 
-			if n, err = io.ReadFull(from, buf[0:bufLen]); err != nil {
+			if n, err = io.ReadFull(to, buf[0:bufLen]); err != nil {
 				chErr <- fmt.Errorf("Failed to read full, %d != %d: %s", n, bufLen, err)
 				return
 			}
@@ -64,7 +64,7 @@ func proxy(from net.Conn) {
 			buf[0] = byte(bufLen >> 8)
 			buf[1] = byte(bufLen)
 
-			if n, err := from.Write(buf[0 : bufLen+2]); err != nil {
+			if n, err := to.Write(buf[0 : bufLen+2]); err != nil {
 				chErr <- fmt.Errorf("Failed to write, %d != %d: %s", n, bufLen+2, err)
 				return
 			}
@@ -76,14 +76,16 @@ func proxy(from net.Conn) {
 }
 
 func main() {
-	flag.StringVar(&from, "from", "0.0.0.0:1194", "tcp listen address")
-	flag.StringVar(&to, "to", "localhost:1194", "openvpn udp address")
+	flag.StringVar(&to, "to", "0.0.0.0:1190", "TCP listen address")
+	flag.StringVar(&from, "from", "localhost:1194", "OpenVPN UDP address to proxy to the TCP address")
 	flag.IntVar(&mtu, "mtu", 1500, "maximum MTU")
 	flag.Parse()
 
-	ln, err := net.Listen("tcp", from)
+	log.Printf("Proxying from UDP %s to TCP %s", to, from)
+
+	ln, err := net.Listen("tcp", to)
 	if err != nil {
-		log.Fatalf("Failed to listen %s: %s", from, err)
+		log.Fatalf("Failed to listen %s: %s", to, err)
 	}
 
 	for {
