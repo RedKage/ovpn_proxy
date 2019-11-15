@@ -15,3 +15,7 @@ Will redirect from port 1194 which is the UDP OpenVPN to port 1234 in TCP.
 ## See also
 
 - OpenVPN protocol spec: http://openvpn.net/index.php/open-source/documentation/security-overview.html
+
+## License ##
+|![http://i.imgur.com/oGGeSQP.png](http://i.imgur.com/oGGeSQP.png)|The license for ovpn_proxy is the [WTFPL](http://www.wtfpl.net/): _Do What the Fuck You Want to Public License_.|
+|:----------------------------------------------------------------|:--------------------------------------------------------------------------------------------------------------------|
