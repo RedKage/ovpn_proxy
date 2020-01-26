@@ -14,12 +14,13 @@ var (
 	mtu  int
 )
 
-func proxy(to net.Conn) {
-	defer to.Close()
+func proxy(from net.Conn) {
+	defer from.Close()
 
-	conn, err := net.Dial("udp", from)
+	// UDP connect
+	conn, err := net.Dial("udp", to)
 	if err != nil {
-		log.Printf("Failed to dial %s: %s", from, err)
+		log.Printf("Failed to dial UDP endpoint %s: %s", to, err)
 		return
 	}
 	defer conn.Close()
@@ -29,7 +30,7 @@ func proxy(to net.Conn) {
 		lenBuf := make([]byte, 2)
 		buf := make([]byte, mtu)
 		for {
-			n, err := io.ReadFull(to, lenBuf)
+			n, err := io.ReadFull(from, lenBuf)
 			if err != nil {
 				chErr <- fmt.Errorf("Failed to read full, %d != 2: %s", n, err)
 				return
@@ -41,7 +42,7 @@ func proxy(to net.Conn) {
 				return
 			}
 
-			if n, err = io.ReadFull(to, buf[0:bufLen]); err != nil {
+			if n, err = io.ReadFull(from, buf[0:bufLen]); err != nil {
 				chErr <- fmt.Errorf("Failed to read full, %d != %d: %s", n, bufLen, err)
 				return
 			}
@@ -64,7 +65,7 @@ func proxy(to net.Conn) {
 			buf[0] = byte(bufLen >> 8)
 			buf[1] = byte(bufLen)
 
-			if n, err := to.Write(buf[0 : bufLen+2]); err != nil {
+			if n, err := from.Write(buf[0 : bufLen+2]); err != nil {
 				chErr <- fmt.Errorf("Failed to write, %d != %d: %s", n, bufLen+2, err)
 				return
 			}
@@ -72,28 +73,31 @@ func proxy(to net.Conn) {
 	}()
 
 	err = <-chErr
-	log.Printf("Error on proxy: %s", err)
+	log.Printf("Error on proxy from %s: %s", conn.RemoteAddr().(*net.UDPAddr), err)
 }
 
 func main() {
-	flag.StringVar(&to, "to", "0.0.0.0:1190", "TCP listen address")
-	flag.StringVar(&from, "from", "localhost:1194", "OpenVPN UDP address to proxy to the TCP address")
+	flag.StringVar(&from, "from", "0.0.0.0:1190", "TCP listen address")
+	flag.StringVar(&to, "to", "localhost:1194", "OpenVPN server UDP address")
 	flag.IntVar(&mtu, "mtu", 1500, "maximum MTU")
 	flag.Parse()
 
-	log.Printf("Proxying from UDP %s to TCP %s", to, from)
+	log.Printf("Proxying from TCP %s to UDP %s", from, to)
 
-	ln, err := net.Listen("tcp", to)
+	// TCP listen
+	ln, err := net.Listen("tcp", from)
 	if err != nil {
-		log.Fatalf("Failed to listen %s: %s", to, err)
+		log.Fatalf("Failed to listen on %s: %s", from, err)
 	}
 
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			log.Fatalf("Failed to accept: %s", err)
+			continue
 		}
 
+		log.Printf("Accepted TCP connection from %s", conn.RemoteAddr().(*net.TCPAddr))
 		go proxy(conn)
 	}
 }
